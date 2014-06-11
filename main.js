@@ -17,7 +17,7 @@ var checkFeatureSupport = function(){
   }
 }
 
-
+var s = new WebSocket('ws://' + window.location.hostname + ':8080/foobar/');
 
 $(document).ready(function() {
   try{
@@ -28,31 +28,60 @@ $(document).ready(function() {
     alert("this uses the web audio API, try opening it in google chrome \n\n <3 whichlight" );
   }
 
-//  alert("Turn the volume up and touch the screen. Share the URL with a friend to hear their sounds. Let's have a wild synth party! \n\n <3 @whichlight");
-
   var color = hsvToRgb(Math.random(),1,1);
   col = 'rgb(' + color.join(',') + ')';
 
-    checkFeatureSupport();
-    $fun = document.getElementById("fun");
-    hammertime = Hammer($fun, {
-      prevent_default: true,
-      no_mouseevents: true
-    })
-    .on('touch', function(event){
-      touchActivate(event);
-    })
-    .on('drag', function(event){
-      touchActivate(event);
-    })
-    .on('release', function(event){
-      touchDeactivate();
+  s.onopen = function() {
+    console.log("connected !!!");
+    client_id = 123; // should actually be some unique ID, maybe based on Sec-Websockets-Accept value?
+    console.log(client_id);
+
+    if(typeof client_id != "undefined"){
+      $('body').append('<span class="synth" id="synth_'+client_id+'"><span style="display:none;" class="chat"/></span>');
+    }
+
+    $('#synth_'+client_id).css({
+      'left' : ($(window).width()/2-20) + 'px',
+      'top' : $(window).height()/2-20 + 'px',
+      'background-color': col,
+      'opacity' : '0.2'
     });
-    });
+
+    if(typeof client_id !="undefined"){
+      synths[client_id]=prepSynths();
+    }
+  };
+  s.onmessage = function(e) {
+  };
+
+  s.onerror = function(e) {
+    console.log(e);
+  }
+
+  s.onclose = function(e) {
+    console.log("connection closed");
+  }
+
+  checkFeatureSupport();
+  $fun = document.getElementById("fun");
+  hammertime = Hammer($fun, {
+    prevent_default: true,
+    no_mouseevents: true
+  })
+  .on('touch', function(event){
+    touchActivate(event);
+  })
+  .on('drag', function(event){
+    touchActivate(event);
+  })
+  .on('release', function(event){
+    touchDeactivate();
+  });
+});
 
 
 var touchActivate = function(event){
-  pressed= true;
+  pressed = true;
   var c = event.gesture.center;
   var x = c.pageX;
   var y = c.pageY;
@@ -66,14 +95,17 @@ var touchActivate = function(event){
     id:client_id,
   }
   if(typeof client_id != "undefined"){
-    socket.emit('move', data);
+    s.send('move');
+    //socket.emit('move', data);
   }
   playSynth(data);
 }
 
 var touchDeactivate = function(){
   pressed=false;
-  socket.emit('silent',{state:"stop"});
+  s.send('silent');
+  id = 123; // stupid hack because I can't figure out how to access the Sec_Websockets_Accept header
+  //socket.emit('silent',{state:"stop"});
   synths[client_id][2].gain.value=0;
   $('#synth_'+id).css({
     'opacity' : '0.2'
@@ -81,11 +113,6 @@ var touchDeactivate = function(){
 
 
 }
-
-//
-//socketio
-
-var socket = io.connect('http://'+window.location.hostname);
 
 function synthmap(x,y){
   tx = 40*Math.pow(2,x*5);
@@ -98,7 +125,7 @@ function map_range(value, low1, high1, low2, high2) {
 }
 
 
-socket.on('connect',function(){
+/*socket.on('connect',function(){
   client_id = socket.socket.sessionid;
   console.log(client_id);
 
@@ -130,7 +157,7 @@ socket.on('silent',function(id){
 
 socket.on('move', function (data) {
   playSynth(data);
-});
+});*/
 
 var playSynth = function(data){
   if($('#synth_'+data['id']).length == 0 && typeof data['id'] !="undefined") {
@@ -163,7 +190,7 @@ var playSynth = function(data){
 
 }
 
-socket.on('close', function (id) {
+/*socket.on('close', function (id) {
   console.log('disconnect ' + id);
   if(id in synths){
     if(synths[id][0].playbackState>1){
@@ -172,7 +199,7 @@ socket.on('close', function (id) {
     }
   }
   $('#synth_'+id).remove();
-});
+});*/
 
 
 function sendData(data) {
@@ -183,7 +210,6 @@ function sendData(data) {
   }
   return true;
 }
-
 
 function prepSynths(){
   var oscillator = context.createOscillator(); //need perens here
